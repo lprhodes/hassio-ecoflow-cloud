@@ -97,9 +97,10 @@ class EcoflowAuthentication:
 
 
 class EcoflowDataHolder:
-    def __init__(self, update_period_sec: int, collect_raw: bool = False):
+    def __init__(self, update_period_sec: int, collect_raw: bool = False, decode_params: bool = False):
         self.__update_period_sec = update_period_sec
         self.__collect_raw = collect_raw
+        self.__decode_params = decode_params
         self.set = BoundFifoList[dict[str, Any]]()
         self.set_reply = BoundFifoList[dict[str, Any]]()
         self.get = BoundFifoList[dict[str, Any]]()
@@ -139,6 +140,10 @@ class EcoflowDataHolder:
         self.__get_reply_observable.on_next(self.get_reply)
 
     def update_to_target_state(self, target_state: dict[str, Any]):
+        if self.__decode_params:
+            decode_json_params(target_state)
+
+
         self.params.update(target_state)
         self.__broadcast()
 
@@ -147,7 +152,13 @@ class EcoflowDataHolder:
         # self.__params_time = datetime.fromtimestamp(raw['timestamp'], UTC)
         self.__params_time = utcnow()
         self.params['timestamp'] = raw['timestamp']
-        self.params.update(raw['params'])
+
+        params = raw['params']
+        if self.__decode_params:
+            decode_json_params(params)
+
+
+        self.params.update(params)
 
         if (utcnow() - self.__params_broadcast_time).total_seconds() > self.__update_period_sec:
             self.__broadcast()
@@ -157,7 +168,6 @@ class EcoflowDataHolder:
         self.__params_observable.on_next(self.params)
 
     def __add_raw_data(self, raw: dict[str, Any]):
-        if self.__collect_raw:
             self.raw_data.append(raw)
 
     def params_time(self) -> datetime:
@@ -179,7 +189,8 @@ class EcoflowMQTTClient:
         self._get_topic = f"/app/{auth.user_id}/{self.device_sn}/thing/property/get"
         self._get_reply_topic = f"/app/{auth.user_id}/{self.device_sn}/thing/property/get_reply"
 
-        self.data = EcoflowDataHolder(entry.options.get(OPTS_REFRESH_PERIOD_SEC), self.device_type == "DIAGNOSTIC")
+        decode_params = self.device_type == EcoflowModel.POWER_KIT.name
+        self.data = EcoflowDataHolder(entry.options.get(OPTS_REFRESH_PERIOD_SEC), self.device_type == "DIAGNOSTIC", decode_params)
 
         self.device_info_main = DeviceInfo(
             identifiers={(DOMAIN, self.device_sn)},
@@ -338,3 +349,21 @@ class EcoflowMQTTClient:
     def stop(self):
         self.client.loop_stop()
         self.client.disconnect()
+
+
+def get_root_key(key: str, data: dict):
+    if key in data:
+        return key
+
+    keys = key.split('.')
+    return keys[0]
+
+def decode_json_params(data: dict):
+    for key in data.keys():
+        value = data[key]
+
+        try:
+            data[key] = json.loads(value)
+        except:
+           data[key] = value
+            

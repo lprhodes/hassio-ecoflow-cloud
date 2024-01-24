@@ -1,3 +1,4 @@
+
 from custom_components.ecoflow_cloud.config_flow import EcoflowModel
 from custom_components.ecoflow_cloud.devices import BaseDevice, DiagnosticDevice
 from custom_components.ecoflow_cloud.devices.delta2 import Delta2
@@ -14,6 +15,7 @@ from custom_components.ecoflow_cloud.devices.power_kit import PowerKit
 from custom_components.ecoflow_cloud.devices.powerstream import PowerStream
 from custom_components.ecoflow_cloud.devices.glacier import Glacier
 from custom_components.ecoflow_cloud.devices.wave2 import Wave2
+
 
 devices: dict[str, BaseDevice] = {
     EcoflowModel.DELTA_2.name: Delta2(),

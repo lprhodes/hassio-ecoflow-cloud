@@ -1,6 +1,9 @@
 from __future__ import annotations
+import json
 import inspect
+import logging
 from typing import Any, Callable, Optional, OrderedDict, Mapping
+from types import SimpleNamespace
 
 from homeassistant.components.number import NumberEntity
 from homeassistant.components.select import SelectEntity
@@ -11,6 +14,7 @@ from homeassistant.helpers.entity import Entity, EntityCategory
 
 from ..mqtt.ecoflow_mqtt import EcoflowMQTTClient
 
+_LOGGER = logging.getLogger(__name__)
 
 class EcoFlowAbstractEntity(Entity):
     _attr_has_entity_name = True
@@ -70,19 +74,27 @@ class EcoFlowDictEntity(EcoFlowAbstractEntity):
         self.async_on_remove(d.dispose)
 
     def _updated(self, data: dict[str, Any]):
+
         # update attributes
         for key, title in self.__attributes_mapping.items():
-            if key in data:
-                self.__attrs[title] = data[key]
+            if get_root_key(key, data) in data:
+                value = get_value(key, data)
+                
+                if value is not None:
+                    self.__attrs[title] = value
 
         # update value
-        if self._mqtt_key in data:
+        if get_root_key(self._mqtt_key, data) in data:
             self._attr_available = True
             if self._auto_enable:
                 self._attr_entity_registry_enabled_default = True
+        
+            value = get_value(self._mqtt_key, data)
 
-            if self._update_value(data[self._mqtt_key]):
+            if value is not None and self._update_value(value):
                 self.async_write_ha_state()
+        else:
+            _LOGGER.info("Missing key %s", self._mqtt_key)
 
     @property
     def extra_state_attributes(self) -> Mapping[str, Any] | None:
@@ -149,3 +161,41 @@ class BaseSelectEntity(SelectEntity, EcoFlowBaseCommandEntity):
 class BaseButtonEntity(ButtonEntity, EcoFlowBaseCommandEntity):
     pass
 
+def get_root_key(key: str, data: dict):
+    if key in data:
+        return key
+
+    keys = key.split('.')
+    return keys[0]
+
+def get_value(key: str, data: dict):
+    if key in data:
+        return data[key]
+    elif "." in key:
+        keys = key.split('.')
+        rootKey = keys.pop(0)
+        remainingKeys = '.'.join(keys)
+        rootValue: dict = data[rootKey]
+
+        # Pick first value as dict (thus far) contains a single value, with the device serial as its key 
+        if len(rootValue.keys()) == 1:
+            rootValue = next(iter(rootValue.values()))
+
+
+        dotDict = convert_to_dot_notation(rootValue)
+
+        try:
+            return dotDict[remainingKeys]
+        except:
+            return None
+    else:
+        return data[key]
+    
+class convert_to_dot_notation(dict):
+    """
+    Access dictionary attributes via dot notation
+    """
+
+    __getattr__ = dict.get
+    __setattr__ = dict.__setitem__
+    __delattr__ = dict.__delitem__

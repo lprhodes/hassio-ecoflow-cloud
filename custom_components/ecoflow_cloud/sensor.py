@@ -138,6 +138,10 @@ class MilliVoltSensorEntity(BaseSensorEntity):
     _attr_native_value = 3
 
 
+class DeciMilliVoltSensorEntity(MilliVoltSensorEntity):
+    def _update_value(self, val: Any) -> bool:
+        return super()._update_value(int(val) / 10)
+
 class InMilliVoltSensorEntity(MilliVoltSensorEntity):
     _attr_icon = "mdi:transmission-tower-import"
     _attr_suggested_display_precision = 0
@@ -225,6 +229,16 @@ class InWattsSolarSensorEntity(InWattsSensorEntity):
     def _update_value(self, val: Any) -> bool:
         return super()._update_value(int(val) / 10)
 
+class InRawWattsSolarSensorEntity(InWattsSensorEntity):
+    _attr_icon = "mdi:solar-power"
+
+class InRawTotalWattsSolarSensorEntity(InRawWattsSolarSensorEntity):
+    def _update_value(self, val: Any) -> bool:
+        return super()._update_value(int(val) / 1000)
+    
+
+class InRawWattsAltSensorEntity(InWattsSensorEntity):
+    _attr_icon = "mdi:engine"
 
 class OutWattsSensorEntity(WattsSensorEntity):
     _attr_icon = "mdi:transmission-tower-export"
